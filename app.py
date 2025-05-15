@@ -81,10 +81,10 @@ def build_usertags(client, usernames):
     for username, (x, y) in zip(usernames, coords):
         try:
             user_id = client.user_id_from_username(username.replace("@", ""))  # Get the user ID
-            # Create a user tag with the coordinates
+            # Create a user tag with the coordinates (user_id, position)
             tags.append({
                 "user_id": user_id, 
-                "position": [x, y]  # These are the coordinates on the image
+                "position": [x, y]  # Coordinates for where to tag the user
             })
         except Exception as e:
             st.warning(f"⚠️ Failed to tag {username}: {e}")
