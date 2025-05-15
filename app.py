@@ -18,7 +18,7 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
 st.title("🤖 Instagram Auto Poster")
-st.caption("Upload an image, generate a caption, and post it directly to Instagram.")
+st.caption("Upload an image, generate a caption, and post it directly to Instagram. Generate Only One Caption And just Directly Give the Caption as output, I dont want anything like here is output and all etc stuff")
 
 # --- Instagram Login ---
 @st.cache_resource
