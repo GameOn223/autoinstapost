@@ -115,6 +115,9 @@ if uploaded_files:
             img.save(tmp.name)
             image_paths.append(tmp.name)
 
+    # Ask user where to post: Story or Feed
+    post_type = st.radio("📤 Where do you want to post this?", ["Feed Post", "Story"], index=0)
+
     # --- Caption Generation ---
     if st.button("✨ Generate Caption"):
         st.subheader("📝 Caption Section")
@@ -160,19 +163,29 @@ if "caption" in st.session_state:
             usertags = build_usertags(client, tag_usernames)
 
             try:
-                if len(image_paths) == 1:
-                    result = client.photo_upload(
-                        path=image_paths[0],
-                        caption=st.session_state.final_caption,
-                        usertags=usertags
-                    )
+                if post_type == "Story":
+                    if len(image_paths) > 1:
+                        st.error("❌ Instagram stories support only one image.")
+                    else:
+                        result = client.photo_upload_to_story(
+                            path=image_paths[0],
+                            caption=st.session_state.final_caption
+                        )
+                        st.success("✅ Story posted successfully!")
                 else:
-                    usertags_list = [usertags] + [[] for _ in range(len(image_paths) - 1)]
-                    result = client.album_upload(
-                        paths=image_paths,
-                        caption=st.session_state.final_caption,
-                        usertags=usertags_list
-                    )
-                st.success(f"✅ Posted successfully! Post ID: {result.dict().get('pk')}")
+                    if len(image_paths) == 1:
+                        result = client.photo_upload(
+                            path=image_paths[0],
+                            caption=st.session_state.final_caption,
+                            usertags=usertags
+                        )
+                    else:
+                        usertags_list = [usertags] + [[] for _ in range(len(image_paths) - 1)]
+                        result = client.album_upload(
+                            paths=image_paths,
+                            caption=st.session_state.final_caption,
+                            usertags=usertags_list
+                        )
+                    st.success(f"✅ Feed post uploaded! Post ID: {result.dict().get('pk')}")
             except Exception as e:
                 st.error(f"❌ Upload failed: {e}")
