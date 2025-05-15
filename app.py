@@ -4,14 +4,15 @@ import os
 import json
 import tempfile
 import google.generativeai as genai
+from PIL import Image
 
-# Load secrets
+# --- Load secrets ---
 USERNAME = st.secrets["insta"]["username"]
 PASSWORD = st.secrets["insta"]["password"]
 SESSION_FILE = st.secrets["insta"]["session_file"]
 GEMINI_API_KEY = st.secrets["gemini"]["api_key"]
 
-# Configure Gemini
+# --- Configure Gemini ---
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-2.0-flash")
 
@@ -19,7 +20,7 @@ st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
 st.title("🤖 Instagram Auto Poster")
 st.caption("Upload an image, generate a caption, and post it directly to Instagram.")
 
-# ---- Instagram Login ---- #
+# --- Instagram Login ---
 @st.cache_resource
 def login():
     cl = Client()
@@ -40,35 +41,37 @@ def login():
             json.dump(cl.get_settings(), f)
     return cl
 
-# ---- Caption Generator ---- #
-def generate_caption(image_bytes):
+# --- Generate Caption ---
+def generate_caption(pil_image):
     try:
         response = model.generate_content(
-            [image_bytes, "Generate a creative Instagram caption for this image."],
-            stream=False
+            [pil_image, "Generate a short and catchy Instagram caption for this image."],
+            stream=False,
         )
         return response.text.strip()
     except Exception as e:
         return f"Error generating caption: {e}"
 
-# ---- UI ---- #
+# --- UI ---
 uploaded_file = st.file_uploader("📤 Upload an image", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    st.image(uploaded_file, use_column_width=True)
+    image = Image.open(uploaded_file)
+    st.image(image, use_column_width=True)
 
-    # Save to temp file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-        tmp.write(uploaded_file.read())
+        image.save(tmp.name)
         image_path = tmp.name
 
     if st.button("✨ Generate Caption"):
         with st.spinner("Generating caption..."):
-            with open(image_path, "rb") as img_file:
-                caption = generate_caption(img_file.read())
-        st.session_state.caption = caption
-        st.success("Caption generated!")
-        st.write(f"📝 Generated Caption:\n> {caption}")
+            caption = generate_caption(image)
+        if caption.startswith("Error"):
+            st.error(caption)
+        else:
+            st.session_state.caption = caption
+            st.success("Caption generated!")
+            st.write(f"📝 Generated Caption:\n> {caption}")
 
     if "caption" in st.session_state:
         st.write("### Choose how to post:")
