@@ -1,0 +1,89 @@
+import streamlit as st
+from instagrapi import Client
+import os
+import json
+import tempfile
+import google.generativeai as genai
+
+# Load secrets
+USERNAME = st.secrets["insta"]["username"]
+PASSWORD = st.secrets["insta"]["password"]
+SESSION_FILE = st.secrets["insta"]["session_file"]
+GEMINI_API_KEY = st.secrets["gemini"]["api_key"]
+
+# Configure Gemini
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel("gemini-pro-vision")
+
+st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
+st.title("🤖 Instagram Auto Poster")
+st.caption("Upload an image, generate a caption, and post it directly to Instagram.")
+
+# ---- Instagram Login ---- #
+@st.cache_resource
+def login():
+    cl = Client()
+    if os.path.exists(SESSION_FILE):
+        with open(SESSION_FILE, "r") as f:
+            settings = json.load(f)
+            cl.set_settings(settings)
+        try:
+            cl.login(USERNAME, PASSWORD)
+        except Exception:
+            cl = Client()
+            cl.login(USERNAME, PASSWORD)
+            with open(SESSION_FILE, "w") as f:
+                json.dump(cl.get_settings(), f)
+    else:
+        cl.login(USERNAME, PASSWORD)
+        with open(SESSION_FILE, "w") as f:
+            json.dump(cl.get_settings(), f)
+    return cl
+
+# ---- Caption Generator ---- #
+def generate_caption(image_bytes):
+    try:
+        response = model.generate_content(
+            [image_bytes, "Generate a creative Instagram caption for this image."],
+            stream=False
+        )
+        return response.text.strip()
+    except Exception as e:
+        return f"Error generating caption: {e}"
+
+# ---- UI ---- #
+uploaded_file = st.file_uploader("📤 Upload an image", type=["jpg", "jpeg", "png"])
+
+if uploaded_file:
+    st.image(uploaded_file, use_column_width=True)
+
+    # Save to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+        tmp.write(uploaded_file.read())
+        image_path = tmp.name
+
+    if st.button("✨ Generate Caption"):
+        with st.spinner("Generating caption..."):
+            with open(image_path, "rb") as img_file:
+                caption = generate_caption(img_file.read())
+        st.session_state.caption = caption
+        st.success("Caption generated!")
+        st.write(f"📝 Generated Caption:\n> {caption}")
+
+    if "caption" in st.session_state:
+        st.write("### Choose how to post:")
+        option = st.radio("Use generated caption or write your own?", ("Generated", "Custom"))
+
+        if option == "Custom":
+            custom_caption = st.text_area("✏️ Write your custom caption:")
+        else:
+            custom_caption = st.session_state.caption
+
+        if st.button("📲 Post to Instagram"):
+            with st.spinner("Posting to Instagram..."):
+                client = login()
+                try:
+                    result = client.photo_upload(image_path, custom_caption)
+                    st.success(f"✅ Posted successfully! Post ID: {result.dict().get('pk')}")
+                except Exception as e:
+                    st.error(f"❌ Failed to post: {e}")
