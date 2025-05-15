@@ -3,24 +3,43 @@ from instagrapi import Client
 import os
 import json
 import tempfile
+import random
 import google.generativeai as genai
 from PIL import Image
 
-# --- Load secrets ---
+# --- Secrets ---
 USERNAME = st.secrets["insta"]["username"]
 PASSWORD = st.secrets["insta"]["password"]
 SESSION_FILE = st.secrets["insta"]["session_file"]
 GEMINI_API_KEY = st.secrets["gemini"]["api_key"]
+APP_PASSWORD = st.secrets["app"]["password"]
 
-# --- Configure Gemini ---
+# --- Static Lists ---
+FACULTY_IDS = ["@faculty1", "@faculty2", "@faculty3"]
+STUDENT_IDS = ["@student1", "@student2", "@student3"]
+
+# --- Gemini Config ---
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel("gemini-1.5-flash")
 
 st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
-st.title("🤖 Instagram Auto Poster")
-st.caption("Upload an image, generate a caption, and post it directly to Instagram.")
 
-# --- Instagram Login ---
+# --- Password Protection ---
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if not st.session_state.authenticated:
+    st.title("🔐 Login Required")
+    password = st.text_input("Enter Access Password", type="password")
+    if st.button("Login"):
+        if password == APP_PASSWORD:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("❌ Incorrect Password")
+    st.stop()
+
+# --- Login to Instagram ---
 @st.cache_resource
 def login():
     cl = Client()
@@ -41,61 +60,119 @@ def login():
             json.dump(cl.get_settings(), f)
     return cl
 
-# --- Generate Caption ---
-def generate_caption(pil_image):
+# --- Caption Generator ---
+def generate_caption(pil_image, extra_prompt=None):
     try:
-        response = model.generate_content(
-            [pil_image, "Generate a short, creative, and engaging Instagram caption for this image. Generate Only One Caption And just Directly Give the Caption as output, I dont want anything like here is output and all etc stuff"],
-            stream=False,
-        )
+        prompt = "Write a short, aesthetic Instagram caption for this image."
+        if extra_prompt:
+            prompt += f" Extra detail: {extra_prompt}"
+        response = model.generate_content([pil_image, prompt])
         return response.text.strip()
     except Exception as e:
         return f"Error generating caption: {e}"
 
-# --- UI ---
-uploaded_file = st.file_uploader("📤 Upload an image", type=["jpg", "jpeg", "png"])
+# --- Random Coordinates for Tagging ---
+def get_random_coords(n):
+    return [(round(random.uniform(0.1, 0.9), 2), round(random.uniform(0.1, 0.9), 2)) for _ in range(n)]
 
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, use_column_width=True)
+def build_usertags(client, usernames):
+    tags = []
+    coords = get_random_coords(len(usernames))
+    for username, (x, y) in zip(usernames, coords):
+        try:
+            user_id = client.user_id_from_username(username.replace("@", ""))
+            tags.append({"user_id": user_id, "position": [x, y]})
+        except Exception as e:
+            st.warning(f"⚠️ Failed to tag {username}: {e}")
+    return tags
 
-    # 👉 Convert RGBA/other to RGB (JPEG-safe)
-    if image.mode != "RGB":
-        image = image.convert("RGB")
+# --- UI Start ---
+st.title("🤖 Instagram Auto Poster")
 
-    # Save image to a temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-        image.save(tmp.name)
-        image_path = tmp.name
+uploaded_files = st.file_uploader("📤 Upload image(s)", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
 
-    # --- Generate Caption ---
+if uploaded_files:
+    images = []
+    image_paths = []
+
+    st.subheader("🖼 Preview & Reorder")
+    for i, file in enumerate(uploaded_files):
+        img = Image.open(file)
+        if img.mode != "RGB":
+            img = img.convert("RGB")
+        images.append(img)
+        st.image(img, caption=f"Image {i+1}", use_column_width=True)
+
+    order_input = st.text_input("✏️ Enter custom order (e.g. 1,2,3):", value=",".join(str(i+1) for i in range(len(images))))
+    try:
+        order = [int(i.strip()) - 1 for i in order_input.split(",")]
+        images = [images[i] for i in order]
+    except:
+        st.warning("⚠️ Invalid order format. Using default.")
+
+    for img in images:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            img.save(tmp.name)
+            image_paths.append(tmp.name)
+
+    # --- Caption Generation ---
     if st.button("✨ Generate Caption"):
-        with st.spinner("Generating caption using Gemini..."):
-            caption = generate_caption(image)
+        st.subheader("📝 Caption Section")
+        extra_prompt = ""
+        if len(images) > 1:
+            extra_prompt = st.text_input("Optional Extra Prompt for Caption (Multi-image):")
+
+        with st.spinner("Generating caption..."):
+            caption = generate_caption(images[0], extra_prompt)
 
         if caption.startswith("Error"):
             st.error(caption)
         else:
             st.session_state.caption = caption
-            st.success("✅ Caption generated!")
-            st.write(f"📝 Generated Caption:\n> {caption}")
+            st.success("✅ Caption Generated")
+            st.write(f"> {caption}")
 
-    # --- Post Options ---
-    if "caption" in st.session_state:
-        st.write("### Choose how to post:")
-        option = st.radio("Use generated caption or write your own?", ("Generated", "Custom"))
+# --- Tag Section ---
+if "caption" in st.session_state:
+    st.subheader("👥 Tag Users in Post")
+    selected_tags = st.multiselect("Select ID groups:", ["Faculty", "Students", "Custom"])
 
-        if option == "Custom":
-            custom_caption = st.text_area("✏️ Write your custom caption:")
-        else:
-            custom_caption = st.session_state.caption
+    tag_usernames = []
+    if "Faculty" in selected_tags:
+        tag_usernames.extend(FACULTY_IDS)
+    if "Students" in selected_tags:
+        tag_usernames.extend(STUDENT_IDS)
+    if "Custom" in selected_tags:
+        custom_input = st.text_input("Enter Custom IDs (@user1, @user2):")
+        if custom_input:
+            tag_usernames.extend([u.strip() for u in custom_input.split(",")])
 
-        # --- Post to Instagram ---
-        if st.button("📲 Post to Instagram"):
-            with st.spinner("Posting to Instagram..."):
-                client = login()
-                try:
-                    result = client.photo_upload(image_path, custom_caption)
-                    st.success(f"✅ Posted successfully! Post ID: {result.dict().get('pk')}")
-                except Exception as e:
-                    st.error(f"❌ Failed to post: {e}")
+    tags_text = " ".join(tag_usernames)
+    full_caption = f"{st.session_state.caption}\n\n{tags_text}"
+
+    st.markdown("### 🖊 Final Caption:")
+    st.text_area("Edit if needed:", value=full_caption, key="final_caption", height=150)
+
+    # --- POST TO INSTAGRAM ---
+    if st.button("📲 Post to Instagram"):
+        with st.spinner("Uploading to Instagram..."):
+            client = login()
+            usertags = build_usertags(client, tag_usernames)
+
+            try:
+                if len(image_paths) == 1:
+                    result = client.photo_upload(
+                        path=image_paths[0],
+                        caption=st.session_state.final_caption,
+                        usertags=usertags
+                    )
+                else:
+                    usertags_list = [usertags] + [[] for _ in range(len(image_paths) - 1)]
+                    result = client.album_upload(
+                        paths=image_paths,
+                        caption=st.session_state.final_caption,
+                        usertags=usertags_list
+                    )
+                st.success(f"✅ Posted successfully! Post ID: {result.dict().get('pk')}")
+            except Exception as e:
+                st.error(f"❌ Upload failed: {e}")
