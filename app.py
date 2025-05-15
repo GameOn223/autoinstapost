@@ -63,33 +63,13 @@ def login():
 # --- Caption Generator ---
 def generate_caption(pil_image, extra_prompt=None):
     try:
-        prompt = "Write a short, aesthetic Instagram caption for this image."
+        prompt = "Write a short, aesthetic Instagram caption for this image.Directly give me Caption Dont Give me here is caption and all that shit"
         if extra_prompt:
             prompt += f" Extra detail: {extra_prompt}"
         response = model.generate_content([pil_image, prompt])
         return response.text.strip()
     except Exception as e:
         return f"Error generating caption: {e}"
-
-# --- Random Coordinates for Tagging ---
-def get_random_coords(n):
-    return [(round(random.uniform(0.1, 0.9), 2), round(random.uniform(0.1, 0.9), 2)) for _ in range(n)]
-
-def build_usertags(client, usernames):
-    tags = []
-    coords = get_random_coords(len(usernames))
-    for username, (x, y) in zip(usernames, coords):
-        try:
-            user_id = client.user_id_from_username(username.replace("@", ""))  # Get the user ID
-            # Create a user tag with the coordinates (user_id, x, y)
-            tags.append({
-                "user_id": user_id, 
-                "x": x,  # Coordinates for where to tag the user
-                "y": y
-            })
-        except Exception as e:
-            st.warning(f"⚠️ Failed to tag {username}: {e}")
-    return tags
 
 # --- UI Start ---
 st.title("🤖 Instagram Auto Poster")
@@ -140,9 +120,9 @@ if uploaded_files:
             st.success("✅ Caption Generated")
             st.write(f"> {caption}")
 
-# --- Tag Section ---
+# --- Honorable Mentions Section ---
 if "caption" in st.session_state:
-    st.subheader("👥 Tag Users in Post")
+    st.subheader("👥 Honorable Mentions")
     selected_tags = st.multiselect("Select ID groups:", ["Faculty", "Students", "Custom"])
 
     tag_usernames = []
@@ -155,8 +135,9 @@ if "caption" in st.session_state:
         if custom_input:
             tag_usernames.extend([u.strip() for u in custom_input.split(",")])
 
-    tags_text = " ".join(tag_usernames)
-    full_caption = f"{st.session_state.caption}\n\n{tags_text}"
+    # Prepare the "Honorable Mentions" string
+    mentions_text = " ".join(tag_usernames)
+    full_caption = f"{st.session_state.caption}\n\nHonorable Mentions: {mentions_text}"
 
     st.markdown("### 🖊 Final Caption:")
     st.text_area("Edit if needed:", value=full_caption, key="final_caption", height=150)
@@ -165,7 +146,6 @@ if "caption" in st.session_state:
     if st.button("📲 Post to Instagram"):
         with st.spinner("Uploading to Instagram..."):
             client = login()
-            usertags = build_usertags(client, tag_usernames)
 
             try:
                 # Upload the photo first
@@ -177,10 +157,7 @@ if "caption" in st.session_state:
                             path=image_paths[0],
                             caption=st.session_state.final_caption
                         )
-                        media_id = result.id  # Access media ID directly (no dict())
-                        # Add the tags using media_edit
-                        client.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
-                        st.success("✅ Story posted with tags!")
+                        st.success("✅ Story posted!")
                 else:
                     if len(image_paths) == 1:
                         # Upload the single photo
@@ -188,24 +165,14 @@ if "caption" in st.session_state:
                             path=image_paths[0],
                             caption=st.session_state.final_caption
                         )
-                        media_id = result.id  # Directly access the ID of the photo
-                        # Add the tags using media_edit
-                        client.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
-                        st.success("✅ Feed post uploaded with tags!")
+                        st.success("✅ Feed post uploaded!")
                     else:
                         # Upload the album
                         result = client.album_upload(
                             paths=image_paths,
                             caption=st.session_state.final_caption
                         )
-                        # Extract media IDs from the tuple of results (album upload returns a tuple)
-                        media_ids = [item.id for item in result]  # Access .id for each media item
-
-                        # Add tags for each photo in the album
-                        for media_id in media_ids:
-                            client.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
-
-                    st.success("✅ Album post uploaded with tags!")
+                        st.success("✅ Album post uploaded!")
 
             except Exception as e:
                 st.error(f"❌ Upload failed: {e}")
