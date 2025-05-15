@@ -14,7 +14,7 @@ GEMINI_API_KEY = st.secrets["gemini"]["api_key"]
 
 # --- Configure Gemini ---
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
 st.title("🤖 Instagram Auto Poster")
@@ -45,7 +45,7 @@ def login():
 def generate_caption(pil_image):
     try:
         response = model.generate_content(
-            [pil_image, "Generate a short and catchy Instagram caption for this image."],
+            [pil_image, "Generate a short, creative, and engaging Instagram caption for this image."],
             stream=False,
         )
         return response.text.strip()
@@ -59,20 +59,28 @@ if uploaded_file:
     image = Image.open(uploaded_file)
     st.image(image, use_column_width=True)
 
+    # 👉 Convert RGBA/other to RGB (JPEG-safe)
+    if image.mode != "RGB":
+        image = image.convert("RGB")
+
+    # Save image to a temp file
     with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
         image.save(tmp.name)
         image_path = tmp.name
 
+    # --- Generate Caption ---
     if st.button("✨ Generate Caption"):
-        with st.spinner("Generating caption..."):
+        with st.spinner("Generating caption using Gemini..."):
             caption = generate_caption(image)
+
         if caption.startswith("Error"):
             st.error(caption)
         else:
             st.session_state.caption = caption
-            st.success("Caption generated!")
+            st.success("✅ Caption generated!")
             st.write(f"📝 Generated Caption:\n> {caption}")
 
+    # --- Post Options ---
     if "caption" in st.session_state:
         st.write("### Choose how to post:")
         option = st.radio("Use generated caption or write your own?", ("Generated", "Custom"))
@@ -82,6 +90,7 @@ if uploaded_file:
         else:
             custom_caption = st.session_state.caption
 
+        # --- Post to Instagram ---
         if st.button("📲 Post to Instagram"):
             with st.spinner("Posting to Instagram..."):
                 client = login()
