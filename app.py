@@ -13,7 +13,7 @@ GEMINI_API_KEY = st.secrets["gemini"]["api_key"]
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-pro-vision")
+model = genai.GenerativeModel("gemini-2.0-flash")
 
 st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
 st.title("🤖 Instagram Auto Poster")
