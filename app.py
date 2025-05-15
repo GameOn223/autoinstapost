@@ -18,7 +18,7 @@ model = genai.GenerativeModel("gemini-1.5-flash")
 
 st.set_page_config(page_title="📸 Auto Instagram Poster", layout="centered")
 st.title("🤖 Instagram Auto Poster")
-st.caption("Upload an image, generate a caption, and post it directly to Instagram. Generate Only One Caption And just Directly Give the Caption as output, I dont want anything like here is output and all etc stuff")
+st.caption("Upload an image, generate a caption, and post it directly to Instagram.")
 
 # --- Instagram Login ---
 @st.cache_resource
@@ -45,7 +45,7 @@ def login():
 def generate_caption(pil_image):
     try:
         response = model.generate_content(
-            [pil_image, "Generate a short, creative, and engaging Instagram caption for this image."],
+            [pil_image, "Generate a short, creative, and engaging Instagram caption for this image. Generate Only One Caption And just Directly Give the Caption as output, I dont want anything like here is output and all etc stuff"],
             stream=False,
         )
         return response.text.strip()
