@@ -177,32 +177,35 @@ if "caption" in st.session_state:
                             path=image_paths[0],
                             caption=st.session_state.final_caption
                         )
-                        media_id = result.id  # Directly access the ID (not dict())
+                        media_id = result.id  # Access media ID directly (no dict())
                         # Add the tags using media_edit
                         client.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
                         st.success("✅ Story posted with tags!")
                 else:
                     if len(image_paths) == 1:
+                        # Upload the single photo
                         result = client.photo_upload(
                             path=image_paths[0],
                             caption=st.session_state.final_caption
                         )
-                        media_id = result.id  # Access media ID directly
+                        media_id = result.id  # Directly access the ID of the photo
                         # Add the tags using media_edit
                         client.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
+                        st.success("✅ Feed post uploaded with tags!")
                     else:
+                        # Upload the album
                         result = client.album_upload(
                             paths=image_paths,
                             caption=st.session_state.final_caption
                         )
-                        # If album, extract the media IDs
-                        media_ids = [item.id for item in result]  # Access each media ID directly
+                        # Extract media IDs from the tuple of results (album upload returns a tuple)
+                        media_ids = [item.id for item in result]  # Access .id for each media item
 
                         # Add tags for each photo in the album
                         for media_id in media_ids:
                             client.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
 
-                    st.success("✅ Feed post uploaded with tags!")
+                    st.success("✅ Album post uploaded with tags!")
 
             except Exception as e:
                 st.error(f"❌ Upload failed: {e}")
