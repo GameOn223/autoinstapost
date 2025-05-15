@@ -81,10 +81,11 @@ def build_usertags(client, usernames):
     for username, (x, y) in zip(usernames, coords):
         try:
             user_id = client.user_id_from_username(username.replace("@", ""))  # Get the user ID
-            # Create a user tag with the coordinates (user_id, position)
+            # Create a user tag with the coordinates (user_id, x, y)
             tags.append({
                 "user_id": user_id, 
-                "position": [x, y]  # Coordinates for where to tag the user
+                "x": x,  # Coordinates for where to tag the user
+                "y": y
             })
         except Exception as e:
             st.warning(f"⚠️ Failed to tag {username}: {e}")
@@ -167,30 +168,42 @@ if "caption" in st.session_state:
             usertags = build_usertags(client, tag_usernames)
 
             try:
+                # Upload the photo first
                 if post_type == "Story":
                     if len(image_paths) > 1:
                         st.error("❌ Instagram stories support only one image.")
                     else:
                         result = client.photo_upload_to_story(
                             path=image_paths[0],
-                            caption=st.session_state.final_caption,
-                            usertags=usertags  # Pass user tags directly here
+                            caption=st.session_state.final_caption
                         )
-                        st.success("✅ Story posted successfully!")
+                        media_id = result.dict().get("id")  # Get media ID for tagging
+
+                        # Add the tags using media_edit
+                        cl.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
+                        st.success("✅ Story posted with tags!")
                 else:
                     if len(image_paths) == 1:
                         result = client.photo_upload(
                             path=image_paths[0],
-                            caption=st.session_state.final_caption,
-                            usertags=usertags  # Pass user tags directly here
+                            caption=st.session_state.final_caption
                         )
+                        media_id = result.dict().get("id")  # Get media ID for tagging
+
+                        # Add the tags using media_edit
+                        cl.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
                     else:
-                        usertags_list = [usertags] + [[] for _ in range(len(image_paths) - 1)]
                         result = client.album_upload(
                             paths=image_paths,
-                            caption=st.session_state.final_caption,
-                            usertags=usertags_list  # Pass user tags directly here
+                            caption=st.session_state.final_caption
                         )
-                    st.success(f"✅ Feed post uploaded! Post ID: {result.dict().get('pk')}")
+                        media_ids = [item.dict().get("id") for item in result]  # Get media IDs for album
+
+                        # Add tags for each photo in the album
+                        for media_id in media_ids:
+                            cl.media_edit(media_id, caption="Updated caption with tags!", tags=usertags)
+
+                    st.success("✅ Feed post uploaded with tags!")
+
             except Exception as e:
                 st.error(f"❌ Upload failed: {e}")
