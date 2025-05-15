@@ -80,8 +80,12 @@ def build_usertags(client, usernames):
     coords = get_random_coords(len(usernames))
     for username, (x, y) in zip(usernames, coords):
         try:
-            user_id = client.user_id_from_username(username.replace("@", ""))
-            tags.append({"user_id": user_id, "position": [x, y]})
+            user_id = client.user_id_from_username(username.replace("@", ""))  # Get the user ID
+            # Create a user tag with the coordinates
+            tags.append({
+                "user_id": user_id, 
+                "position": [x, y]  # These are the coordinates on the image
+            })
         except Exception as e:
             st.warning(f"⚠️ Failed to tag {username}: {e}")
     return tags
@@ -169,7 +173,8 @@ if "caption" in st.session_state:
                     else:
                         result = client.photo_upload_to_story(
                             path=image_paths[0],
-                            caption=st.session_state.final_caption
+                            caption=st.session_state.final_caption,
+                            usertags=usertags  # Pass user tags directly here
                         )
                         st.success("✅ Story posted successfully!")
                 else:
@@ -177,14 +182,14 @@ if "caption" in st.session_state:
                         result = client.photo_upload(
                             path=image_paths[0],
                             caption=st.session_state.final_caption,
-                            usertags=usertags
+                            usertags=usertags  # Pass user tags directly here
                         )
                     else:
                         usertags_list = [usertags] + [[] for _ in range(len(image_paths) - 1)]
                         result = client.album_upload(
                             paths=image_paths,
                             caption=st.session_state.final_caption,
-                            usertags=usertags_list
+                            usertags=usertags_list  # Pass user tags directly here
                         )
                     st.success(f"✅ Feed post uploaded! Post ID: {result.dict().get('pk')}")
             except Exception as e:
